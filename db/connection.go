@@ -1,9 +1,25 @@
 package db
 
-import "database/sql"
+import (
+	"database/sql"
+	"fmt"
+	"os"
 
-const DSN = "postgres://username:password@localhost:5432/dbname?sslmode=disable"
+	_ "github.com/lib/pq"
+)
 
 func Connect() (*sql.DB, error) {
-	return sql.Open("postgres", DSN)
+	dbUser := os.Getenv("DB_USER")
+	dbPassword := os.Getenv("DB_PASSWORD")
+	dbName := os.Getenv("DB_NAME")
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+
+	if dbUser == "" || dbPassword == "" || dbName == "" || dbHost == "" || dbPort == "" {
+		return nil, fmt.Errorf("Missing environment variables for DB connection")
+	}
+
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", dbUser, dbPassword, dbHost, dbPort, dbName)
+	
+	return sql.Open("postgres", dsn)
 }
