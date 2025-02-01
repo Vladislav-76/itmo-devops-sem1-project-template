@@ -5,65 +5,97 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"project_sem/models"
 )
 
-func InsertValues(connection *sql.DB, rows [][]string) (int, int, int, error) {
+func InsertValues(connection *sql.DB, rows [][]string) (int, error) {
 	if len(rows) < 2 {
-		return 0, 0, 0, fmt.Errorf("No values in CSV file")
+		return 0, fmt.Errorf("No values in CSV file")
 	}
 
 	transaction, err := connection.Begin()
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, err
 	}
-	defer transaction.Rollback()
 
 	totalItems := 0
-	categoryMap := make(map[string]struct{})
-	totalPrice := 0.0
 
 	for _, row := range rows[1:] {
-		id, err := strconv.Atoi(row[0])
-		if err != nil {
-			return 0, 0, 0, err
-		}
 		name := row[1]
 		category := row[2]
 		price, err := strconv.ParseFloat(row[3], 64)
 		if err != nil {
-			return 0, 0, 0, err
+			transaction.Rollback()
+			return 0, err
 		}
 		createDate, err := time.Parse("2006-01-02", row[4])
 		if err != nil {
-			return 0, 0, 0, err
+			transaction.Rollback()
+			return 0, err
 		}
 
 		_, err = transaction.Exec(
-			`INSERT INTO prices (id, name, category, price, create_date) VALUES ($1, $2, $3, $4, $5)`,
-			id, name, category, price, createDate,
+			`INSERT INTO prices (name, category, price, create_date) VALUES ($1, $2, $3, $4)`,
+			name, category, price, createDate,
 		)
 		if err != nil {
-			return 0, 0, 0, err
+			transaction.Rollback()
+			return 0, err
 		}
 
 		totalItems++
-		categoryMap[category] = struct{}{}
-		totalPrice += price
 	}
 
 	err = transaction.Commit()
 	if err != nil {
-		return 0, 0, 0, err
+		transaction.Rollback()
+		return 0, err
 	}
 
-	return totalItems, len(categoryMap), int(totalPrice), nil
+	return totalItems, nil
 }
 
-func GetAllValues(connection *sql.DB) (*sql.Rows, error) {
+func GetCategoriesAndPriceMeanings(connection *sql.DB) (int, float64, error) {
+	var totalCategories int
+	err := connection.QueryRow("SELECT COUNT(DISTINCT category) FROM prices").Scan(&totalCategories)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	var totalPrice float64
+	err = connection.QueryRow("SELECT SUM(price) FROM prices").Scan(&totalPrice)
+	if err != nil {
+		return 0, 0, err
+	}
+	return totalCategories, totalPrice, nil
+}
+
+func GetAllProducts(connection *sql.DB) ([]models.Product, error) {
 	rows, err := connection.Query("SELECT * FROM prices")
 	if err != nil {
 		return nil, err
 	}
-	
-	return rows, nil
+	defer rows.Close()
+
+	var products []models.Product
+	for rows.Next() {
+		var product models.Product
+
+		if err := rows.Scan(
+			&product.ID,
+			&product.Name,
+			&product.Category,
+			&product.Price,
+			&product.CreateDate); err != nil {
+			return nil, err
+		}
+
+		products = append(products, product)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return products, nil
 }

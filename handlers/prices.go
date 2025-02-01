@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,23 +12,20 @@ import (
 	"project_sem/utils"
 )
 
-func PricesHandler(response http.ResponseWriter, request *http.Request) {
+type Handler struct {
+	Connection *sql.DB
+}
+
+func (handler *Handler) PricesHandler(response http.ResponseWriter, request *http.Request) {
 	if request.Method == http.MethodGet {
 
-		connection, err := db.Connect()
+		products, err := db.GetAllProducts(handler.Connection)
 		if err != nil {
 			http.Error(response, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		defer connection.Close()
 
-		rows, err := db.GetAllValues(connection)
-		if err != nil {
-			http.Error(response, err.Error(), http.StatusInternalServerError)
-			return
-		}		
-
-		zipFile, err := utils.WriteCSVToZip(rows)
+		zipFile, err := utils.WriteCSVToZip(products)
 		if err != nil {
 			http.Error(response, err.Error(), http.StatusInternalServerError)
 			return
@@ -72,23 +70,22 @@ func PricesHandler(response http.ResponseWriter, request *http.Request) {
 			return
 		}
 
-		connection, err := db.Connect()
-		if err != nil {
-			http.Error(response, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer connection.Close()
-
-		totalItems, totalCategories, totalPrice, err := db.InsertValues(connection, rows)
+		totalItems, err := db.InsertValues(handler.Connection, rows)
 		if err != nil {
 			http.Error(response, "Unable to save values to the database", http.StatusInternalServerError)
 			return
 		}
 
-		responseValue := models.Response {
-			TotalItems:		 totalItems,
+		totalCategories, totalPrice, err := db.GetCategoriesAndPriceMeanings(handler.Connection)
+		if err != nil {
+			http.Error(response, "Unable to get values from the database", http.StatusInternalServerError)
+			return
+		}
+
+		responseValue := models.Response{
+			TotalItems:      totalItems,
 			TotalCategories: totalCategories,
-			TotalPrice:		 totalPrice,
+			TotalPrice:      int(totalPrice),
 		}
 
 		response.Header().Set("Content-Type", "application/json")

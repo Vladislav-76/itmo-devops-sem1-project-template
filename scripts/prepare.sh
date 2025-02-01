@@ -41,10 +41,10 @@ EOF
 
 sudo -u postgres psql -d $DB_NAME << EOF
 CREATE TABLE IF NOT EXISTS $DB_TABLE_NAME (
-    id int,
-    name varchar,
-    category varchar,
-    price float8,
-    create_date date
+    id SERIAL PRIMARY KEY,
+    name VARCHAR,
+    category VARCHAR,
+    price DECIMAL(10, 2),
+    create_date TIMESTAMP
 );
 EOF
